@@ -273,3 +273,105 @@ cv = tune.CrossValidator(estimator=lr,
                evaluator=evaluator
                )
 
+
+############################################
+     # Machine Learning with PySpark   #
+     #           Introduction          #
+############################################
+
+
+# Import the PySpark module
+from pyspark.sql import SparkSession
+
+# Create SparkSession object
+spark = SparkSession.builder \
+                    .master('local[*]') \
+                    .appName('test') \
+                    .getOrCreate()
+
+# What version of Spark?
+# (Might be different to what you saw in the presentation!)
+import pyspark
+print(pyspark.__version__)
+
+# Terminate the cluster
+spark.stop()
+
+# Read data from CSV file
+flights = spark.read.csv('flights.csv',
+                         sep=',',
+                         header=True,
+                         inferSchema=True,
+                         nullValue='NA')
+
+# Get number of records
+print("The data contain %d records." % flights.count())
+
+# View the first five records
+flights.show(5)
+
+# Check column data types
+print(flights.dtypes)
+
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType
+
+# Specify column names and types
+schema = StructType([
+    StructField("id", IntegerType()),
+    StructField("text", StringType()),
+    StructField("label", IntegerType())
+])
+
+# Load data from a delimited file
+sms = spark.read.csv('sms.csv', sep=';', header=False, schema=schema)
+
+# Print schema of DataFrame
+sms.printSchema()
+
+
+
+############################################
+     # Machine Learning with PySpark #
+     #       Classification          #
+############################################
+
+
+# Remove the 'flight' column
+flights_drop_column = flights.drop('flight')
+
+# Number of records with missing 'delay' values
+flights_drop_column.filter('delay IS NULL').count()
+
+# Remove records with missing 'delay' values
+flights_valid_delay = flights_drop_column.filter('delay IS NOT NULL')
+
+# Remove records with missing values in any column and get the number of remaining rows
+flights_none_missing = flights_valid_delay.dropna()
+print(flights_none_missing.count())
+
+# Import the required function
+from pyspark.sql.functions import round
+
+# Convert 'mile' to 'km' and drop 'mile' column
+flights_km = flights.withColumn('km', round(flights.mile * 1.60934, 0)) \
+                    .drop('mile')
+
+# Create 'label' column indicating whether flight delayed (1) or not (0)
+flights_km = flights_km.withColumn('label', (flights.delay >= 15).cast('integer'))
+
+# Check first five records
+flights_km.show(5)
+
+from pyspark.ml.feature import StringIndexer
+
+# Create an indexer
+indexer = StringIndexer(inputCol='carrier', outputCol='carrier_idx')
+
+# Indexer identifies categories in the data
+indexer_model = indexer.fit(flights)
+
+# Indexer creates a new column with numeric index values
+flights_indexed = indexer_model.transform(flights)
+
+# Repeat the process for the other categorical feature
+flights_indexed = StringIndexer(inputCol='org', outputCol='org_idx').fit(flights_indexed).transform(flights_indexed)
