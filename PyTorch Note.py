@@ -791,14 +791,249 @@ class Net(nn.Module):
 
 '''
 Overfitting in the testing set
-- Training set
-- Validation set (also know as corss validation)
-- Testing set
+- Training set: train the model
+- Validation set: selection the model (aka corss validation)
+- Testing set: test the model
 
 Validation set is to avoid test set been contaminated.
 
+The networks are trained in the training set as before, 
+and each of them is tested in the validation set.
+Finally, the best performance model is tested in the testing set.
 
+It is important the the testing set is used only once.
+Otherwise, its result won't be trustworthy.
+Also, train, validation, test set should not overlap.
+
+To detect overfitting, we should use the error rate 
+between training set and validation set.
 
 '''
 
+indices = np.arange(50000)
+np.random.shuffle(indices)
+train_loader = torch.utils.data.DataLoader(
+    datasets.CIFAR10(root='./data', train=True, download=True,
+                   transform=transforms.Compose([transforms.ToTensor(),
+                   transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])),
+    batch_size=1, shuffle=False, sampler=torch.utils.data.SubsetRandomSampler(indices[:45000]))
+val_loader = torch.utils.data.DataLoader(
+                    datasets.CIFAR10(root='./data', train=True, download=True,
+                                    transform=transforms.Compose([transforms.ToTensor(),
+                                    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])), 
+                    batch_size=1, 
+                    shuffle=False, 
+                    sampler=torch.utils.data.SubsetRandomSampler(indices[45000:50000]))
 
+# PRACTICE
+# Shuffle the indices
+indices = np.arange(60000)
+np.random.shuffle(indices)
+
+# Build the train loader
+train_loader = torch.utils.data.DataLoader(datasets.MNIST('mnist', download=True, train=True,
+                     transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])),
+                     batch_size=64, shuffle=False, sampler=torch.utils.data.SubsetRandomSampler(indices[:55000]))
+
+# Build the validation loader
+val_loader = torch.utils.data.DataLoader(datasets.MNIST('mnist', download=True, train=True,
+                   transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])),
+                   batch_size=64, shuffle=False, sampler=torch.utils.data.SubsetRandomSampler(indices[55000:60000]))
+
+'''
+Techniques to make training more efficiently with better predictions
+- L2 Regularization
+- dropout parameter
+- optimizers (Adam vs gradient descent etc)
+- batch-norm momentum and epsilon
+- number of epochs for early stopping
+
+Question: how to choose from those above hyperparameters?
+
+Answer: Train many networks with different hyperparameters (typically with random values)
+        and test them in the validation set. Then use the best performing net in the validation set
+        to know the expected accuracy of the network in new data.
+
+'''
+
+'''
+1. L2 regularization
+- also used in algorithms like regression or SVM
+- add a L2 regularization penalty term to the loss function
+- PyTorch: add the weight_decay argument in the optimizer
+'''
+optimizer = optim.Adam(net.parameters(), lr=3e-4, weight_decay=0.0001)
+
+'''
+2. Dropout
+- change the archetecture randomly to avoid dependency
+- usually in full-connected layer instead of CNNs
+- Parameter: p -> control the probability of units being droped
+'''
+self.classifier = nn.Sequential(
+    nn.Dropout(p=0.5),
+    nn.Linear(256 * 6 * 6, 4096),
+    nn.ReLU(inplace=True),
+    nn.Dropout(p=0.5),
+    nn.Linear(4096, 4096),
+    nn.ReLU(inplace=True),
+    nn.Linear(4096, num_classes),
+)
+'''
+3. Batch Normalization
+- compute the mean and variance of the minibatch for each feature
+  and then it normalizes the features based on mean/var
+- a must have for large neural networks nowaday
+'''
+self.bn = nn.BatchNorm2d(num_features=64, eps=1e-05, momentum=0.9)
+
+'''
+4. Early stopping
+- Check the accuracy of the network in the validation set
+  at the end each epoch
+- if after n epochs the performance of the net hasn't increased
+  (or it has decreased), then training is terminated
+
+'''
+# Train mode
+model.train()
+# Eval() mode
+model.eval()
+
+###### Practice
+
+# L2-regularization
+
+# Instantiate the network
+model = Net()
+
+# Instantiate the cross-entropy loss
+criterion = nn.CrossEntropyLoss()
+
+# Instantiate the Adam optimizer
+optimizer = optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.001)
+
+# Dropout
+class Net(nn.Module):
+    def __init__(self):
+        
+        # Define all the parameters of the net
+        self.classifier = nn.Sequential(
+            nn.Linear(28*28, 200),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5),
+            nn.Linear(200, 500),
+            nn.ReLU(inplace=True),
+            nn.Linear(500, 10))
+        
+    def forward(self, x):
+    
+        # Do the forward pass
+        return self.classifier(x)
+
+# Batch Normalization
+# NOTE: BatchNorm2d modules require the number of channels as argument
+# Should BatchNorm before or after the activation function?
+class Net(nn.Module):
+    def __init__(self):
+        super(Net, self).__init__()
+        
+        # Implement the sequential module for feature extraction
+        self.features = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=10, kernel_size=3, stride=1, padding=1),
+            nn.MaxPool2d(2, 2), 
+            nn.ReLU(inplace=True), 
+            nn.BatchNorm2d(10),
+            nn.Conv2d(in_channels=10, out_channels=20, kernel_size=3, stride=1, padding=1),
+            nn.MaxPool2d(2, 2), 
+            nn.ReLU(inplace=True), 
+            nn.BatchNorm2d(20))
+        
+        # Implement the fully connected layer for classification
+        self.fc = nn.Linear(in_features=7*7*20, out_features=10)
+
+'''
+Transfer learning
+
+Retraining / finetuning
+With the layers of other pre-trained net such as ImageNet,
+We can achieve good model on very small datasets.
+
+Methods of finetuning:
+1. Freeze most of the layers: not update them during back-propagation
+   and fine tune only the last few layers (or only the last one)
+2. Finetune everything (when dataset is larger)   
+
+Typically, when dataset is small, it's better to freeze to avoid overfitting.
+
+pre-trained model format: cifar10_net.pth
+'''
+
+# Fine tuning the CNNs
+# Instantiate the model
+model = Net()
+# Load the parameters from the old model
+model.load_state_dict(torch.load('cifar10_net.pth'))
+# Change the number of out channels
+model.fc = nn.Linear(4 * 4 * 1024, 100)
+# Train and evaluate the model
+model.train()
+
+# Freeze the layer: set param.requires_grad = False 
+# Instantiate the model
+model = Net()
+# Load the parameters from the old model
+model.load_state_dict(torch.load('cifar10_net.pth'))
+# Freeze all the layers bar the final one
+for param in model.parameters():
+    param.requires_grad = False
+# Change the number of output units
+model.fc = nn.Linear(4 * 4 * 1024, 100)
+# Train and evaluate the model
+model.train()
+
+# Torch Vision Library
+import torchvision
+model = torchvision.models.resnet18(pretrained=True)
+model.fc = nn.Linear(512, num_classes)
+
+
+
+# Practice
+# Create a new model
+model = Net()
+
+# Change the number of out channels
+model.fc = nn.Linear(7 * 7 * 512, 26)
+
+# Train and evaluate the model
+model.train()
+train_net(model, optimizer, criterion)
+print("Accuracy of the net is: " + str(model.eval()))
+
+# Create a model using
+model = Net()
+
+# Load the parameters from the old model
+model.load_state_dict(torch.load('my_net.pth'))
+
+# Change the number of out channels
+model.fc = nn.Linear(7 * 7 * 512, 26)
+
+# Train and evaluate the model
+model.train()
+train_net(model, optimizer, criterion)
+print("Accuracy of the net is: " + str(model.eval()))
+
+# Import the module
+import torchvision
+
+# Download resnet18
+model = torchvision.models.resnet18(pretrained=True)
+
+# Freeze all the layers bar the last one
+for param in model.parameters():
+    param.requires_grad = False
+
+# Change the number of output units
+model.fc = nn.Linear(512, 7)
