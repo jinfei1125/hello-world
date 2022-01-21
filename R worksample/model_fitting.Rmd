@@ -1,0 +1,140 @@
+---
+title: "Model Fitting"
+author: "Jinfei Zhu (jinfei@uchicago.edu)"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(here)
+
+set.seed(1234)
+theme_set(theme_minimal()) 
+```
+
+# Statistical learning
+
+> Attempt to summarize relationships between variables by reducing the dimensionality of the data
+
+# Improve Shamwow sales
+
+```{r echo = TRUE, eval = TRUE}
+# get advertising data
+advertising <- read_csv(here("data", "Advertising.csv")) 
+```
+
+```{r echo = TRUE, eval = TRUE}
+# plot separate facets for relationship between ad spending and sales
+plot_ad <- advertising %>%
+  gather(method, spend, -Sales) %>%
+  ggplot(aes(spend, Sales)) +
+  facet_wrap(~ method, scales = "free_x") +
+  geom_point() +
+  labs(x = "Spending (in thousands of dollars)"); plot_ad
+```
+
+# Parametric methods
+
+```{r echo = TRUE, eval = TRUE}
+method_model <- function(df) {
+  lm(Sales ~ spend, data = df)
+}
+
+ad_pred <- advertising %>%
+  gather(method, spend, -Sales) %>%
+  group_by(method) %>%
+  nest() %>%
+  mutate(model = map(data, method_model),
+         pred = map(model, broom::augment)) %>%
+  unnest(pred)
+
+plot_ad +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_linerange(data = ad_pred,
+                 aes(ymin = Sales, ymax = .fitted),
+                 color = "blue",
+                 alpha = .5) 
+```
+
+# Non-parameteric: Locally weighted scatterplot smoothing
+
+```{r echo = TRUE, eval = TRUE}
+library(broom) # model operations
+library(lattice)  # for the data
+
+mod <- loess(NOx ~ E, 
+             data = ethanol, 
+             degree = 1, 
+             span = .75)
+
+fit <- augment(mod)
+
+ggplot(fit, aes(E, NOx)) +
+  geom_point() +
+  geom_line(aes(y = .fitted), color = "red") +
+  labs(x = "Equivalence ratio",
+       y = "Concentration of nitrogen oxides")
+```
+
+# Optimism of training error
+
+Take a look at the random set of generated data points. 
+
+```{r echo = TRUE, eval = TRUE}
+# simulate data from ISL figure 2.9
+sim_mse <- tibble(
+  x = runif(n = 50, min = 0, max = 100),
+  y = 5.055901 - 0.1848551*x + 0.00748706*x^2 - 0.00005543478*x^3 + rnorm(50, sd = 0.6)
+)
+
+# model fit
+ggplot(sim_mse, aes(x, y)) +
+  geom_point() +
+  stat_function(fun = function(x) 5.055901 - 0.1848551*x + 0.00748706*x^2 - 0.00005543478*x^3) +
+  geom_smooth(aes(color = "lm"), method = lm, se = FALSE) +
+  geom_smooth(aes(color = "spline-low"), method = lm,
+              formula = y ~ splines::ns(x, 5), se = FALSE) +
+  geom_smooth(aes(color = "spline-high"), method = lm,
+              formula = y ~ splines::ns(x, 20), se = FALSE) +
+  scale_color_brewer(type = "qual") +
+  labs(title = "Training data points",
+       subtitle = "Models estimated on training set",
+       x = expression(X),
+       y = expression(Y)) +
+  theme(legend.position = "none")
+```
+
+As the flexibility increases, the models are more likely to fit the data; the training MSE will decrease. But this does not guarantee the test MSE also decreases.
+
+Here, I applied the models fit on the training set to a new test data set generated from the same underlying process. That is, everything is identical, even the DGP (Data Generating Process). Just this time, we are changing the set of data, and overlaying the original fit lines to the new data.
+
+```{r echo = TRUE, eval = TRUE}
+sim_mse_test <- tibble(
+  x = runif(n = 50, min = 0, max = 100),
+  y = 5.055901 - 0.1848551 * x + 0.00748706 * x^2 - 0.00005543478 * x^3 + rnorm(50, sd = 0.6)
+)
+
+# model fit
+ggplot(sim_mse, aes(x, y)) +
+  geom_point(data = sim_mse_test) +
+  stat_function(fun = function(x) 5.055901 - 0.1848551*x + 0.00748706*x^2 - 0.00005543478*x^3) +
+  geom_smooth(aes(color = "lm"), method = lm, se = FALSE) +
+  geom_smooth(aes(color = "spline-low"), method = lm,
+              formula = y ~ splines::ns(x, 5), se = FALSE) +
+  geom_smooth(aes(color = "spline-high"), method = lm,
+              formula = y ~ splines::ns(x, 20), se = FALSE) +
+  scale_color_brewer(type = "qual") +
+  labs(title = "Test data points",
+       subtitle = "Models estimated on training set",
+       x = expression(X),
+       y = expression(Y)) +
+  theme(legend.position = "none")
+```
+
+It's not as clear as we might hope, but still we can see that these models no longer perform as well as compared to the training data, especially the *overfit purple line*. 
+
+When we rely only on training error, we essentially fool ourselves into thinking we've found the best model, because as we continue to tune to the training data, and run into the threat of overfitting to the training data. Thus we get too optimistic. 
+
+That is, the model starts to detect artifacts and random patterns specific to the single set of observations but which may not really exist in the DGP. 

@@ -1,0 +1,257 @@
+---
+title: "Modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+Author: Jinfei Zhu
+
+Thank you for reviewing my project! If you have any questions, feel free to give me a feedback! Wish you a very pleasant day during this special time! :)
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(GGally)
+```
+
+### Load data
+
+```{r load-data}
+load("movies.Rdata")
+```
+
+
+```{r}
+movies_new <- movies %>%
+  filter(!is.na(runtime))
+final_model <- lm(imdb_rating ~ runtime + genre + mpaa_rating +  best_dir_win + top200_box, data = movies_new)
+plot(final_model$residuals ~ movies_new$runtime)
+```
+
+plot(final_model$residuals ~ movies$runtime)
+* * *
+
+## Part 1: Data
+
+**Generalizability**
+
+The data set is comprised of 651 randomly sampled movies produced and released before 2016. Since the data is collected by random sampling, it's reasonable to assume the data has a good generalizability. 
+
+**Causality**
+
+Since the data set is observational data and no random assignment is used, we cannot find causal relationships from this data. We can only analyze the correlation between variables.
+
+**Possible Bias**
+
+Because both IMDB and Rotten Tomatoes are popular and receive a lot reviews of each movie, and a lot of movie authorities give their reviews on these two websites, I think the rating should be less biased compared to some less popular review website. Some people, for example, the elderly may not be used to giving their reviews online so the rating may not represent their preference, however, given the relatively small number of this group of people, it should not be a big problem.
+ 
+
+* * *
+
+## Part 2: Research question
+
+Because now I am a data scientist at Paramount Pictures, and my boss wants to know what attributes make a movie popular. She is also interested in learning something new about movies. She wants my team to figure it all out. So I have two research questions. The second one is the main question.
+
+1. If there is a correlation between different rating system, such IMDB rating, critics scores on Rotten Tomatoes, and audience scores on Rotten Tomatoes?
+
+2. Taking the IMDB rating as my explained variable, is there a linear relationship between the IMDB rating of the movie and the movie's characteristics, such as the theater release year(there may be a certain time trend among people's taste, for example, the older the better), the genre of the movie, MPAA rating, whether the movie has won a best picture Oscar, whether one of the main actors/actresses/directors in the movie once won a Oscar, the box office performance?
+
+Since there are many excellent directors and actors/actress, I don't use their names as the predictors of my linear model.
+
+
+**Variables for the first question**: `imdb_rating`, `critics score`, `audience score`
+
+**Variables for the second question**:
+
+Response Variable: `imdb_rating`
+
+Predictors: `thtr_rel_year`, `runtime`, `genre`, `mpaa_rating`, `best_pic_win`, `best_actor_win`, `best_actress_win`, `best_dir_win`, and `top200_box`.
+
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+### Question 1: Relationship among different rating systems
+
+To find out whether the score from IMDB and Rotten Tomatoes Critics/Audience rating are correlated, we can first calculate the correlation coefficients and then draw a correlation plot.
+```{r}
+rating_sys <- movies %>%
+  select(imdb_rating, critics_score, audience_score)
+ggpairs(rating_sys )
+```
+
+From the correlation coefficients between different variables and the scatter plots, we find that these three variables are significantly correlated. Actually we can expect this because both IMDB and Rotten Tomatoes are very popular review platforms, with a large number of reviews so the ratings are less biased compared to some small review platforms. Thus, it's okay to only choose `imdb_rating` as our variables.
+
+### Question 2: Predictors for movies' IMDB Rating 
+
+First, we can see if there is a difference in the average IMDB rating scores for different genre of movies.
+
+**Building Statistics**
+
+```{r}
+movies %>%
+  group_by(genre) %>%
+  summarise(median_imdb = median(imdb_rating)) 
+```
+From the result, we can find that 'Comedy' has the lowest median, which is 5.70, and 'Musical & Performing Arts' has the highest median, which is 7.55. Is the difference among different genre significant? We can find the answer of this question in next part. We can also have a look at the boxing plots.
+
+**plotting**
+
+```{r box plot}
+A<-movies[unclass(movies$genre) %in% c(1,2,3,4,5,6),]
+B<-movies[unclass(movies$genre) %in% c(7,8,9,10,11),]
+par(mfrow=c(1,2))
+ggplot(data =  A, aes(x = genre, y = imdb_rating)) + geom_boxplot()
+ggplot(data =  B, aes(x = genre, y = imdb_rating))+ geom_boxplot()
+par(mfrow=c(1,1))
+```
+Because there are 11 kinds of genres, to make the box plot readable, I divide it into two plots. From the plot we can easily find that the IMDB rating among different movie genres are different.
+
+Because there are so many predictors we want to know, and drawing box plot and doing hypothesis test for each one of them can be a heavy workload, we can use a multiple linear regression model to realize our goal.
+
+* * *
+
+## Part 4: Modeling
+
+### Full Model
+
+First, let's start with the full model. We will include variables `thtr_rel_year`, `runtime`, `genre`,  `mpaa_rating`, `best_pic_win`, `best_actor_win`, `best_actress_win`, `best_dir_win`, and `top200_box` in our model.
+```{r}
+full_model <- lm(data = movies, imdb_rating ~ thtr_rel_year + runtime + genre  + mpaa_rating +best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box)
+summary(full_model)
+```
+In the result, we find the in variable genre, 'Action & Adventure' is taken as the based variable, and MPAA rating 'G' is taken as the based variable. 
+
+### Model Selection
+
+From the result of regression, we find that `best_actress_win` has the largest p-value of 0.32757, so based on the **p-value backward method**, I will take this variable out. 
+
+Although 'mpaa_ratingUnrated' has a p-value up to 0.71998, we cannot take it out because it's a level of the categorical variable 'mpaa_rating'.
+
+```{r}
+m1 <- lm(data = movies, imdb_rating ~ thtr_rel_year + runtime + genre + mpaa_rating +best_pic_win + best_actor_win + best_dir_win + top200_box)
+summary(m1)
+```
+Now, `best_actor_win` has the largest p-value of 0.22209, so I will take it out and look at the new model. 
+```{r}
+m2 <- lm(data = movies, imdb_rating ~ thtr_rel_year + runtime + genre + mpaa_rating +best_pic_win +  best_dir_win + top200_box)
+summary(m2)
+```
+
+Now, `thtr_rel_year` has the largest p-value of 0.15211, so I will take it out and look at the new model again. 
+
+```{r}
+m3 <- lm(data = movies, imdb_rating ~ runtime + genre + mpaa_rating +best_pic_win +  best_dir_win + top200_box)
+summary(m3)
+```
+
+Now, 'best_pic_win' has the largest p-value of 0.08149, so I will take it out and run the new regression. 
+
+```{r}
+m4 <- lm(data = movies, imdb_rating ~ runtime + genre + mpaa_rating +  best_dir_win + top200_box)
+summary(m4)
+```
+
+Now, we are glad to see that all variables in this model are statistically significant at 5% significance level. So this will be our final model. 
+
+### Model Diagnostic
+
+#### 1. Linearity
+
+The first condition is the linear relationship between each (numerical) explanatory variable and the response variable. Because now only `runtime` in our final model is a numerical variable, We can draw the scatter plot of residuals vs. `runtime`.
+
+```{r}
+final_model <- lm(imdb_rating ~ runtime + genre + mpaa_rating +  best_dir_win + top200_box, data = movies)
+plot(movies$imdb_rating ~ movies$runtime)
+```
+It's a little bit hard to see, but if we use the triangle method, we can still find two triangle on the upper left and lower right of the plot, so there is an actually positive linear relationship.
+
+
+P.S. I tried to use the code `{plot(final_model$residuals ~ movies$runtime)}` to draw the plot of residuals and runtime, but it faild due to the reason 'the length of the variable is not equal'. There are 651 observations in movies, but only 650 residuals in my final model. But I don't know why. If you have some idea please tell me in the feedback! Thank you!!!
+
+#### 2. Residuals Normality
+
+The second condition is that residuals are nearly normal with mean 0. We can draw a histogram of residuals and the normality plot (qq plot) to see the distribution of residuals. 
+```{r}
+hist(final_model$residuals)
+qqnorm(final_model$residuals)
+qqline(final_model$residuals)
+```
+
+
+Unfortunately, these two plots show that the distribution of residuals is left-skewed. Therefore, our model may not be accurate in prediction...
+
+#### 3. Constant Variability of Residuals
+
+To check the homoscedasticity of the residuals, we can draw a scatter plot of residuals v.s. fitted value.
+
+```{r}
+plot(final_model$residuals ~ final_model$fitted.values)
+```
+
+Unfortunately, there is a fan-shape of the residuals. We can see clearly that the variability of residuals decreases shen fitted value increases.
+
+#### 4. Independence of Residuals
+
+To check the independence of residuals, or in other words, the independence of observations, we can draw a plot of residuals v.s. the order of data collection. This will reveal if there is any time trend of data collection.
+
+```{r}
+plot(final_model$residuals)
+```
+
+From this plot, we can see that there is no time trend in data collection. Thus, we can say that observations are independent.
+
+
+* * *
+
+## Part 5: Prediction
+
+Although some conditions are not met in model diagnostic, we can still use the model to make a prediction of new movie. (Though it may not be very accurate...)
+
+The movie I choose is "The invisible Man", a horror movie released in 2020. 
+
+Movie's Information Reference: https://www.the-numbers.com/movie/Invisible-Man-The-(2020)#tab=summary
+
+```{r}
+#Create the data frame of new movie 'The invisible Man'(2020)
+newmovie <- data.frame(runtime = 124,  genre = "Horror",  mpaa_rating = "R",  best_dir_win ="no", top200_box = "no")
+#Make the prediction
+predict(final_model, newmovie)
+```
+The predicted IMDB rating is 6.13.
+
+```{r}
+#Create the Confidence Interval of the prediction
+predict(final_model, newmovie, interval = "prediction", level = 0.95)
+```
+
+The 95% confidence interval of the movie is [4.29,7.96]. The actual IMDB rating of this movie is 7.1 (browsed date: 2020/7/29, website link: https://www.imdb.com/title/tt01051906/), so it falls in our confidence interval.
+
+* * *
+
+## Part 6: Conclusion
+
+The regression model result shows the following conclusion:
+
+If all other conditions hold constant, when the movie's run time increases 1 minute, the movie's IMDB rating is expected to be 0.01 higher. 
+
+If all other conditions hold constant and take the "Action & Adventure" as the based genre, if the movie's genre is "Animation" / "Art House & International" / "Comedy" / "Documentary" / "Drama" / "Horror" / "Musical & Performing Arts"/ "Mystery & Suspense" / "Other"/"Science Fiction & Fantasy", the movie's IMDB rating is expected to be 0.19 lower / 0.65 higher / 0.03 lower / 1.68 higher / 0.64 higher / 0.08 lower / 1.19 higher/ 0.43 higher / 0.57 higher/ 0.28 lower than the "Action & Adventure" movies. 
+
+If all other conditions hold constant and take the "G" as the based MPAA rating, if the movie is rated as "NC-17" / "PG" / "PG-13" / "R" / "Unrated", the movie's IMDB rating is expected to be 0.40/0.61/0.85/0.53/0.39 lower than the G rated movie.
+
+If all other conditions hold constant and the director of the movie has won a Best Director Oscar, its IMDB rating is expected to be 0.40 higher.
+
+If all other conditions hold constant and  the movie is in the Top 200 Box Office list on BoxOfficeMojo, its IMDB is expected to be 0.62 higher.
+
+
+However, the normality and constant variability of residuals condition don't hold in this model. So the prediction of the model may not be accurate. This is the biggest shortcoming of this model.
+
