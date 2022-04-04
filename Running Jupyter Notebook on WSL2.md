@@ -1,6 +1,6 @@
 # Running Jupyter Notebook on WSL2
 
-1. First set up WSL2 and download Ubuntu distribution following steps on: [https://docs.microsoft.com/en-us/windows/wsl/install-win10](https://docs.microsoft.com/en-us/windows/wsl/install-win10)
+1. First set up WSL2 and download Ubuntu distribution following steps on: https://docs.microsoft.com/en-us/windows/wsl/install 
 Manual Installation is recommended
 2. Folders and Files can be accessed at: `\\wsl$`
 3. Download Anaconda Distribution via:
