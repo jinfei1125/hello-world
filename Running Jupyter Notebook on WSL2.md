@@ -18,5 +18,6 @@ Manual Installation is recommended
 
 5. Open jupyter notebook by `jupyter notebook --no-browser`
 
+6. Set GitHub Personal Access Token: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token
 
 Reference: [http://mcb112.org/w00/w00-section.html](http://mcb112.org/w00/w00-section.html)
